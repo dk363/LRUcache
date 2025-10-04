@@ -1,19 +1,19 @@
 #pragma once
 
-#include <cstirng>
+#include <cstring>
 #include <list>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
 #include <optional>
 
-#include "CachePolicy"
+#include "CachePolicy.h"
 
 namespace Cache
 {
 
 // 前向声明
-template<typename Key, typename Value> LruCache;
+template<typename Key, typename Value> class LruCache;
 
 template<typename Key, typename Value> 
 class LruNode 
@@ -21,7 +21,6 @@ class LruNode
 private:
     Key key_;
     Value value_;
-    size_t accessCount_; // 访问次数
     // 因为这里一开始的时候 prev_ next_是相互指的
     // 在双向链表中最好有一边使用 weak_ptr
     std::weak_ptr<LruNode<Key, Value>> prev_; // weakptr 防止循环引用
@@ -30,15 +29,12 @@ public:
     LruNode(Key key, Value value)
         : key_(key)
         , value_(value)
-        , accessCount_(1)
     {}
 
     // 提供必要的访问器
     Key getKey() const { return key_; }
     Value getValue() const { return value_; }
     void setValue(const Value& another_value) { value_ = another_value; }
-    size_t getAccessCount() const { return accessCount_; }
-    void incrementAccessCount() { ++accessCount_; }
 
     // 友元声明 LruCache 可以访问 LruNode 的 private 成员
     friend class LruCache<Key, Value>;
@@ -48,7 +44,7 @@ template<typename Key, typename Value>
 class LruCache : public CachePolicy<Key, Value> 
 {
 public:
-    using LurNodeType = LruNode<Key, Value>;
+    using LruNodeType = LruNode<Key, Value>;
     using NodePtr = std::shared_ptr<LruNodeType>;
     using NodeMap = std::unordered_map<Key, NodePtr>;
 
@@ -110,7 +106,7 @@ public:
         auto it = nodeMap_.find(key);
 
         if (it == nodeMap_.end()) {
-            throw std::out_of_range("Key not found in KLruCache");
+            throw std::out_of_range("Key not found in LruCache");
         }
 
         // 从链表中移除节点
@@ -127,8 +123,8 @@ private:
         // 这里用自己类型默认的构造参数
         // 比如 Key 的类型是 int 那么这里就是 0
         // 如果是 string 那么这里就是 ""
-        dummyHead_ = std::make_shared<NodePtr>(Key(), Value());
-        dummyTail_ = std::make_shared<NodePtr>;
+        dummyHead_ = std::make_shared<LruNodeType>(Key(), Value());
+        dummyTail_ = std::make_shared<LruNodeType>(Key(), Value());
 
         dummyHead_->next_ = dummyTail_;
         dummyTail_->prev_ = dummyHead_;
@@ -175,15 +171,16 @@ private:
     // 移除节点
     void removeNode(NodePtr node) 
     {
-        // 检查前向和后向是否已经被销毁
-        assert(!node->prev_.expired() && node->next_);
-
         // prev_ 是弱引用（weak_ptr），不能直接用 prev_->next_。
         // 所以必须先 .lock() 得到一个 shared_ptr 再解引用
-        auto prev = node->prev_.lock();
-        prev->next_ = node->next_;
-        node->next->prev_ = prev;
-        node->next_ = nullptr;
+        if (!node->prev_.expired() && node->next_)
+        {
+            auto prev = node->prev_.lock();
+            prev->next_ = node->next_;
+            node->next->prev_ = prev;
+            node->next_ = nullptr;
+            node->prev_ = nullptr;
+        }
     }
 
     // 将节点插入到链表尾部（最近访问位置）
@@ -209,21 +206,96 @@ template<typename Key, typename Value>
 class LruKCache : public LruCache<Key, Value>
 {
 public:
-    LruKCache(int capacity, int historyCapacity, int k) 
+    LruKCache(int capacity, int historyListCapacity, int k) 
         : LruCache<Key, Value>(capacity)
-        , historyList_(std::make_unique<LruCache<Key, size_t>>(historyCapacity));
+        , historyList_(std::make_unique<LruCache<Key, size_t>>(historyListCapacity))
         , k_(k);
+    {}
+
+    std::optional<Value> get(Key key)
+    {
+        // 默认构造函数
+        // 改为 Value value; 也可以
+        // get(key, value) 这里本来就是取 key 对应的 value 的值
+        // value 的值是无所谓的
+        Value value{};
+        bool inMainCache = LruCache<Key, Value>::get(key, value);
+        
+        if (inMainCache)
+        {
+            return value;
+        }
+
+        // 因为这里 value 是 private 的 所以这里不可以 &
+        // 因为 historyList_ 维护的是一个二级缓存
+        // 二级缓存也是有大小的的 所以这里 不可以直接更改 value 的值
+        // 而需要 put 更新
+        size_t historyCount = 0;
+        if(auto val = historyList_->get(key)) historyCount = *val;
+        ++historyCount;
+        historyList_->put(key, historyCount);
+
+
+        auto itValue = historyValueMap_.find(key);
+        if (itValue == historyValueMap_.end())
+        {
+            return std::nullopt;
+        }
+
+        if (historyCount >= k)
+        {
+            Value storedValue = itValue->second;
+            moveToLruCache(key, storedValue);
+            return storedValue;
+        }
+
+        return itValue->second;
+    }
+
+    void put(Key key, Value value)
+    {
+        Value existingValue{};
+        bool inMainCache = LruCache<Key, Value>::get(key, existingValue);
+
+        if (inMainCache)
+        {
+            LruCache<Key, Value>::put(key, value);
+            return;
+        }
+
+        size_t historyCount = 0;
+        if(auto val = historyList_->get(key)) historyCount = *val;
+        ++historyCount;
+        historyList_->put(key, historyCount);
+
+        historyValueMap_[key] = value;
+        
+        if (historyCount >= k) 
+        {
+            moveToLruCache(key, value);
+        }
+    }
+
+private:
+    void moveToLruCache(Key key, Value value) 
+    {
+        historyList_->remove(key);
+        historyValueMap_.erase(key);
+        LruCache<Key, Value>::put(key, value);
+    }
 private:
 /**
     LRU-K算法有两个队列，一个是缓存队列，一个是数据访问历史队列。
     当访问一个数据时，首先先在访问历史队列中累加访问次数，
     当历史访问记录超过K次后，才将数据缓存至缓存队列，
     从而避免缓存队列被污染。
+    这个算法有一点像是 cpu 中的二级缓存 historyList_ 实质上是保存的另一个 LruCache
 */
     int                                     k_; // 进入缓存队列的次数
-    std::unique_ptr<KLruCache<Key, size_t>> historyList_; // 访问数据历史记录
+    // unique_ptr 独占资源所有权 不可复制
+    std::unique_ptr<LruCache<Key, size_t>>  historyList_; // 访问数据历史记录
     std::unordered_map<Key, Value>          historyValueMap_; // 存储没有达到 k 次的数据值
 
-}
+};
 
 }
