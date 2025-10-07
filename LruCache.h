@@ -6,6 +6,8 @@
 #include <mutex>
 #include <unordered_map>
 #include <optional>
+#include <vector>
+#include <cmath>
 
 #include "CachePolicy.h"
 
@@ -51,10 +53,11 @@ public:
     LruCache(int capacity) 
         : capacity_(capacity) 
     {
-        if (capacity_ <= 0) {
-            throw std::invalid_argument("Capacity must greater than 0");
+        if (capacity_ > 0) {
+            initializeList();
+        } else {
+            std::invalid_argument("capacity must greater than 0");
         }
-        initializeList();
     }
 
     ~LruCache() override = default;
@@ -177,9 +180,9 @@ private:
         {
             auto prev = node->prev_.lock();
             prev->next_ = node->next_;
-            node->next->prev_ = prev;
-            node->next_ = nullptr;
-            node->prev_ = nullptr;
+            node->next_->prev_ = prev;
+            node->next_.reset();
+            node->prev_ .reset();
         }
     }
 
@@ -188,7 +191,7 @@ private:
     {
         node->next_ = dummyTail_;
         node->prev_ = dummyTail_->prev_;
-        dummyTail_->prev_.lock()->next = node;
+        dummyTail_->prev_.lock()->next_ = node;
         dummyTail_->prev_ = node;
     }
 
@@ -209,8 +212,12 @@ public:
     LruKCache(int capacity, int historyListCapacity, int k) 
         : LruCache<Key, Value>(capacity)
         , historyList_(std::make_unique<LruCache<Key, size_t>>(historyListCapacity))
-        , k_(k);
-    {}
+        , k_(k)
+    {
+        if (k_ <= 0) {
+            throw std::invalid_argument("k must greater than 0");
+        }
+    }
 
     std::optional<Value> get(Key key)
     {
@@ -242,7 +249,7 @@ public:
             return std::nullopt;
         }
 
-        if (historyCount >= k)
+        if (historyCount >= k_)
         {
             Value storedValue = itValue->second;
             moveToLruCache(key, storedValue);
@@ -251,6 +258,16 @@ public:
 
         return itValue->second;
     }
+
+    bool get(Key key, Value& value) override
+    {
+        if (auto opt_val = this->get(key)) {
+            value = *opt_val;
+            return true;
+        }
+        return false;
+    }
+
 
     void put(Key key, Value value)
     {
@@ -270,7 +287,7 @@ public:
 
         historyValueMap_[key] = value;
         
-        if (historyCount >= k) 
+        if (historyCount >= k_) 
         {
             moveToLruCache(key, value);
         }
@@ -298,4 +315,68 @@ private:
 
 };
 
-}
+/**
+    临界区：多个线程可能同时访问（读写）同一份共享资源的那段代码。
+    因为在Lru中有加锁解锁的操作，所以在高并发的环境中 大量的时间消耗在等待的过程中
+    而且这还是在LruK中没有锁操作的情况下 如果LruK中也加上锁的操作 那么还会增加时间
+    而 HashLruCache 的做法是：
+
+    1. 把全量数据分成 N 份（称为分片，或 shard）；
+    2. 每个分片都有自己的一份 LruCache 和独立的 mutex；
+    3. 用哈希函数决定某个 key 属于哪个分片。
+*/
+
+template<typename Key, typename Value>
+class HashLruCaches
+{
+public:
+    HashLruCaches(size_t capacity, size_t sliceNum)
+        : capacity_(capacity)
+        , sliceNum_(sliceNum)
+    {
+        if (sliceNum_ <= 0) {
+            throw std::invalid_argument("sliceNum must be greater than 0");
+        }
+        size_t sliceSize = std::ceil(static_cast<double>(capacity_) / sliceNum_);
+        for (size_t i = 0; i < sliceNum_; ++i) {
+            lruSliceCaches_.emplace_back(std::make_unique<LruCache<Key, Value>>(sliceSize));
+        }
+    }
+
+
+    void put(Key key, Value value)
+    {
+        size_t sliceIndex = Hash(key) % sliceNum_;
+        lruSliceCaches_[sliceIndex]->put(key, value);
+    }
+
+    bool get(Key key, Value& value) 
+    {
+        size_t sliceIndex = Hash(key) % sliceNum_;
+        return lruSliceCaches_[sliceIndex]->get(key, value);
+    }
+
+    Value get(Key key)
+    {
+        Value value{};
+        get(key, value);
+        return value;
+    }
+
+
+private:
+    size_t Hash(Key key) 
+    {
+        std::hash<Key> hashFunc;
+        return hashFunc(key);
+    }
+
+private:
+    size_t                                              capacity_;
+    int                                                 sliceNum_; // 切片的数量
+    // 为了实现 O(1) 的访问速度 那么我们有两种选择 map 和 vactor 而且 sliceNum 是固定的
+    // 所以这里直接可以用 vector
+    std::vector<std::unique_ptr<LruCache<Key, Value>>>  lruSliceCaches_;
+};
+
+} // namespace Cache
