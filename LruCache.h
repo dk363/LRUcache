@@ -202,9 +202,9 @@ private:
     NodePtr     dummyHead_;
     NodePtr     dummyTail_;
 };
+
 // 如果有偶发性的批量操作 那么会将之前的 热点数据 挤出缓存之中
 // 因此 这里进行改进 将进入缓存队列的评判标准从 一次 变为 k次 
-
 template<typename Key, typename Value>
 class LruKCache : public LruCache<Key, Value>
 {
@@ -271,6 +271,7 @@ public:
 
     void put(Key key, Value value)
     {
+        // 这个调用了默认的构造函数 更安全
         Value existingValue{};
         bool inMainCache = LruCache<Key, Value>::get(key, existingValue);
 
