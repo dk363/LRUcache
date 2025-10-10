@@ -1,6 +1,14 @@
 #pragma once
 
+#include <climits>
+#include <mutex>       
+#include <optional>    
+#include <unordered_map> 
+#include <climits>     
+#include <stdexcept>   
+
 #include "CachePolicy.h"
+#include "Log.h"
 
 namespace Cache
 {
@@ -15,76 +23,85 @@ private:
         int freq;
         Key key;
         Value value;
-        std::weak_ptr<Node> pre;
+        std::weak_ptr<Node> prev;
         std::shared_ptr<Node> next;
 
         Node()
             : freq(1), next(nullptr) {}
         Node(Key key, Value value)
-            : freq(1), key(key), value(value), next(nullptr) {}
+            : freq(1), key(key), value(value), prev(), next(nullptr) {}
     };
 
-    using NodePtr = std::shard_ptr<Node>;
+    using NodePtr = std::shared_ptr<Node>;
     int freq_;
-    NodePtr head_;
-    NodePtr tail_;
+    NodePtr dummyHead_;
+    NodePtr dummyTail_;
 
 public:
     // 对于单参数构造函数，尽量使用 explicit，除非明确需要隐式转换的场景（如智能指针的设计）。
     explicit FreqList(int n)
         : freq_(n)
     {
-        head_ = std::make_shared<Node>();
-        tail_ = std::make_shared<Node>();
-        head_->next = tail_;
-        tail_->prev = head_;
+        dummyHead_ = std::make_shared<Node>();
+        dummyTail_ = std::make_shared<Node>();
+        dummyHead_->next = dummyTail_;
+        dummyTail_->prev = dummyHead_;
     }
 
     bool isEmpty() const
     {
-        return head_->next == tail_;
+        return dummyHead_->next == dummyTail_;
     }
     
     // 将节点添至尾部
     void addNode(NodePtr node) 
     {
-        if (!node || !head_ || !tail_) 
+        if (!node || !dummyHead_ || !dummyTail_) 
         {
-            LOG_ERROR("addNode failed: invaild node or empty list");
+            LOG_ERROR_CACHE("addNode failed: invalid node or empty list");
+            return;
         }
 
-        node->pre = tail_->pre;
-        node->next = tail_;
-        tail_->pre.lock()->next = node;
-        tail_->pre = node;
+        node->prev = dummyTail_->prev;
+        node->next = dummyTail_;
+        dummyTail_->prev.lock()->next = node;
+        dummyTail_->prev = node;
     }
 
     void removeNode(NodePtr node)
     {
-        if (!node || !head_ || !tail_) 
+        if (!node || !dummyHead_ || !dummyTail_) 
         {
-            LOG_ERROR("removeNode failed: invalid node or empty list");
+            LOG_ERROR_CACHE("removeNode failed: invalid node or empty list");
             return;
         }
 
-        if (node->pre.expired() || !node->next) 
+        if (node == dummyHead_ || node == dummyTail_)
         {
-            LOG_ERROR("removeNode failed: node's pre is expired or next is null");
+            LOG_ERROR_CACHE("removeNode failed: cannot remove sentinal node");
             return;
         }
 
-        node->pre.lock()->next = node->next;
-        node->next->pre = node->pre;
+        auto prevNode = node->prev.lock();
+        if (!prevNode)
+        {
+            LOG_ERROR_CACHE("removeNode failed: node's prev is expired");
+            return;
+        }
+
+        prevNode->next = node->next;
+        node->next->prev = node->prev;
+
         node->next.reset();
-        node->pre.reset();
+        node->prev.reset();
     }
 
     NodePtr getFirstNode() const 
     {
-        return head_->next;
+        return dummyHead_->next;
     }
     
-    friend class LruCache<Key, Value>
+    friend class LfuCache<Key, Value>;
 };
 
 template <typename Key, typename Value>
@@ -95,9 +112,9 @@ public:
     using NodePtr = std::shared_ptr<Node>;
     using NodeMap = std::unordered_map<Key, NodePtr>;
 
-    LfuCache(int capacity, int maxAverageNum = 1000000) 
+    explicit LfuCache(int capacity, int maxAverageNum = 1000000) 
         : capacity_(capacity)
-        , minFreq_(INT8_MAX) // 这里应该是后面会用 min 函数 实时更新
+        , minFreq_(INT_MAX) // 这里应该是后面会用 min 函数 实时更新
         , maxAverageNum_(maxAverageNum)
         , curAverageNum_(0)
         , curTotalNum_(0)
@@ -155,8 +172,16 @@ public:
     // 清除数据 但是保留缓存实例
     void purge()
     {
+        // 对于锁来说 可以阻塞两个操作 读 写
+        // 只要有这两个操作 就应该对相应的共享资源加锁
+        // 这里清除也是写的一种操作 应该加锁
+        std::lock_guard<std::mutex> lock(mutex_);
+
         nodeMap_.clear();
         freqToFreqList_.clear();
+        curTotalNum_ = 0;
+        curAverageNum_ = 0;
+        minFreq_ = INT_MAX;
     }
 
     private:
@@ -174,14 +199,14 @@ public:
     void updateMinFreq();
 
 private:
-    int                                            capacity_; // 缓存容量
-    int                                            minFreq_; // 最小访问频次 (用于找到最小访问频次结点)
-    int                                            maxAverageNum_; // 最大平均访问频次
-    int                                            curAverageNum_; // 当前平均访问频次
-    int                                            curTotalNum_; // 当前访问所有缓存次数总数 
-    std::mutex                                     mutex_; // 互斥锁
-    NodeMap                                        nodeMap_; // key 到 缓存节点的映射
-    std::unordered_map<int, FreqList<Key, Value>*> freqToFreqList_;// 访问频次到该频次链表的映射
+    int                                                             capacity_; // 缓存容量
+    int                                                             minFreq_; // 最小访问频次 (用于找到最小访问频次结点)
+    int                                                             maxAverageNum_; // 最大平均访问频次
+    int                                                             curAverageNum_; // 当前平均访问频次
+    int                                                             curTotalNum_; // 当前访问所有缓存次数总数 
+    mutable std::mutex                                              mutex_; // 互斥锁
+    NodeMap                                                         nodeMap_; // key 到 缓存节点的映射
+    std::unordered_map<int, std::unique_ptr<FreqList<Key, Value>>>  freqToFreqList_;// 访问频次到该频次链表的映射
 };
 
 // get list 内部的节点 更新访问次数
@@ -190,7 +215,7 @@ void LfuCache<Key, Value>::getInternal(NodePtr node, Value& value)
 {
     if (!node)
     {
-        LOG_ERROR("getInternal failed: invaild node");
+        LOG_ERROR_CACHE("getInternal failed: invalid node");
         return;
     }
 
@@ -208,7 +233,7 @@ void LfuCache<Key, Value>::getInternal(NodePtr node, Value& value)
     // freqToFreqList_[node->freq - 1]链表因node的迁移已经空了，需要更新最小访问频次
     if (node->freq - 1 == minFreq_ && freqToFreqList_[minFreq_]->isEmpty())
     {
-        minFreq_++;
+        ++minFreq_;
     }
 
 }
@@ -227,7 +252,7 @@ void LfuCache<Key, Value>::putInternal(Key key, Value value)
     nodeMap_[key] = node;
     addToFreqList(node);
     addFreqNum(); // 增加总访问次数 如果总访问次数超出上线 然后淘汰非热点数据
-    minFreq_ = min(minFreq_, 1);
+    minFreq_ = std::min(minFreq_, 1);
 }
 
 // 移除缓存中的过期数据 并且更新 FreqNum
@@ -241,6 +266,13 @@ void LfuCache<Key, Value>::kickOut()
     }
     NodePtr node = it->second->getFirstNode();
 
+    // 检查节点是否是哨兵节点
+    if (node == it->second->dummyTail_ || !node)
+    {
+        LOG_ERROR_CACHE("kickOut failed: no vaild node to remove");
+        return;
+    }
+
     removeFromFreqList(node);
     nodeMap_.erase(node->key);
     decreaseFreqNum(node->freq);
@@ -252,7 +284,8 @@ void LfuCache<Key, Value>::removeFromFreqList(NodePtr node)
 {
     if (!node)
     {
-        LOG_ERROR("removeNodeFromFreqList failed: invaild node");
+        LOG_ERROR_CACHE("removeNodeFromFreqList failed: invalid node");
+        return;
     } 
 
     auto freq = node->freq;
@@ -265,7 +298,7 @@ void LfuCache<Key, Value>::decreaseFreqNum(int num)
 {
     if (num <= 0) 
     {
-        LOG_ERROR("decreaseFreqNum failed: decrease num should be greater than 0");
+        LOG_ERROR_CACHE("decreaseFreqNum failed: decrease num should be greater than 0");
         return;
     }
 
@@ -292,8 +325,10 @@ void LfuCache<Key, Value>::addFreqNum()
     }
     else
     {
+        // 这里先转换在变成除法 （将除法结果进行转换是没有意义的）
+        // 这里也可以写 * 1.0 但是这种显示的转换可读性更好
         curAverageNum_ = curTotalNum_ / nodeMap_.size();
-        if (curAverageNum_ > maxAverageNum)
+        if (curAverageNum_ > maxAverageNum_)
         {
             handleOverMaxAverageNum();
         }
@@ -320,7 +355,8 @@ void LfuCache<Key, Value>::handleOverMaxAverageNum()
 
         removeFromFreqList(node);
 
-        node->freq -= maxAverageNum / 2;
+        // 遍历节点 减去最大平均访问次数的 1/2 将之前的热点数据也同步更新 防止旧热点数据污染缓存
+        node->freq -= maxAverageNum_ / 2;
         
         if (node->freq < 1)
         {
@@ -339,7 +375,7 @@ void LfuCache<Key, Value>::addToFreqList(NodePtr node)
 {
     if (!node) 
     {
-        LOG_ERROR("addToFreqList failed: invaild node");
+        LOG_ERROR_CACHE("addToFreqList failed: invalid node");
         return;
     }
     // 两处调用 addToFreqList 的地方已经保证了 node 一定是有效的
@@ -349,7 +385,7 @@ void LfuCache<Key, Value>::addToFreqList(NodePtr node)
     if (freqToFreqList_.find(node->freq) == freqToFreqList_.end())
     {
         // 不存在则创建
-        freqToFreqList_[freq] = new FreqList<Key, Value>(freq);
+        freqToFreqList_[freq] = std::make_unique<FreqList<Key, Value>>(freq);
     }
 
     freqToFreqList_[freq]->addNode(node);
@@ -358,7 +394,10 @@ void LfuCache<Key, Value>::addToFreqList(NodePtr node)
 template<typename Key, typename Value>
 void LfuCache<Key, Value>::updateMinFreq()
 {
-    minFreq_ = INT8_MAX;
+    // 假设两个线程同时执行handleOverMaxAverageNum并调用updateMinFreq
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    minFreq_ = INT_MAX;
     for (const auto& pair : freqToFreqList_)
     {
         if (pair.second && !pair.second->isEmpty())
@@ -369,7 +408,7 @@ void LfuCache<Key, Value>::updateMinFreq()
 
     // 当前缓存中没有任何元素，或者
     // 所有 FreqList 都为空；
-    if (minFreq_ == INT8_MAX)
+    if (minFreq_ == INT_MAX || minFreq_ < 1)
     {
         minFreq_ = 1;
     }

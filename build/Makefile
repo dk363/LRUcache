@@ -65,6 +65,16 @@ CMAKE_BINARY_DIR = /home/dk/cache/build
 #=============================================================================
 # Targets provided globally by CMake.
 
+# Special rule for the target test
+test:
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Running tests..."
+	/usr/bin/ctest --force-new-ctest-process $(ARGS)
+.PHONY : test
+
+# Special rule for the target test
+test/fast: test
+.PHONY : test/fast
+
 # Special rule for the target edit_cache
 edit_cache:
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "No interactive CMake dialog available..."
@@ -117,41 +127,41 @@ depend:
 .PHONY : depend
 
 #=============================================================================
-# Target rules for targets named main
+# Target rules for targets named test_lfu_cache
 
 # Build rule for target.
-main: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 main
-.PHONY : main
+test_lfu_cache: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_lfu_cache
+.PHONY : test_lfu_cache
 
 # fast build rule for target.
-main/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/build
-.PHONY : main/fast
+test_lfu_cache/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_lfu_cache.dir/build.make CMakeFiles/test_lfu_cache.dir/build
+.PHONY : test_lfu_cache/fast
 
-test.o: test.cpp.o
-.PHONY : test.o
+testLfuCache.o: testLfuCache.cpp.o
+.PHONY : testLfuCache.o
 
 # target to build an object file
-test.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/test.cpp.o
-.PHONY : test.cpp.o
+testLfuCache.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_lfu_cache.dir/build.make CMakeFiles/test_lfu_cache.dir/testLfuCache.cpp.o
+.PHONY : testLfuCache.cpp.o
 
-test.i: test.cpp.i
-.PHONY : test.i
+testLfuCache.i: testLfuCache.cpp.i
+.PHONY : testLfuCache.i
 
 # target to preprocess a source file
-test.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/test.cpp.i
-.PHONY : test.cpp.i
+testLfuCache.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_lfu_cache.dir/build.make CMakeFiles/test_lfu_cache.dir/testLfuCache.cpp.i
+.PHONY : testLfuCache.cpp.i
 
-test.s: test.cpp.s
-.PHONY : test.s
+testLfuCache.s: testLfuCache.cpp.s
+.PHONY : testLfuCache.s
 
 # target to generate assembly for a file
-test.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/test.cpp.s
-.PHONY : test.cpp.s
+testLfuCache.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_lfu_cache.dir/build.make CMakeFiles/test_lfu_cache.dir/testLfuCache.cpp.s
+.PHONY : testLfuCache.cpp.s
 
 # Help Target
 help:
@@ -161,10 +171,11 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
-	@echo "... main"
-	@echo "... test.o"
-	@echo "... test.i"
-	@echo "... test.s"
+	@echo "... test"
+	@echo "... test_lfu_cache"
+	@echo "... testLfuCache.o"
+	@echo "... testLfuCache.i"
+	@echo "... testLfuCache.s"
 .PHONY : help
 
 

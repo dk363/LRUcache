@@ -8,7 +8,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/home/dk/cache/test.cpp" "CMakeFiles/main.dir/test.cpp.o" "gcc" "CMakeFiles/main.dir/test.cpp.o.d"
+  "/home/dk/cache/testLfuCache.cpp" "CMakeFiles/test_lfu_cache.dir/testLfuCache.cpp.o" "gcc" "CMakeFiles/test_lfu_cache.dir/testLfuCache.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

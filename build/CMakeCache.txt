@@ -148,7 +148,7 @@ CMAKE_PROJECT_DESCRIPTION:STATIC=
 CMAKE_PROJECT_HOMEPAGE_URL:STATIC=
 
 //Value Computed by CMake
-CMAKE_PROJECT_NAME:STATIC=CacheSystem
+CMAKE_PROJECT_NAME:STATIC=testLfuCache
 
 //Path to a program.
 CMAKE_RANLIB:FILEPATH=/usr/bin/ranlib
@@ -215,23 +215,17 @@ CMAKE_TAPI:FILEPATH=CMAKE_TAPI-NOTFOUND
 // Studio IDE projects all commands are done without /nologo.
 CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 
-//Value Computed by CMake
-CacheSystem_BINARY_DIR:STATIC=/home/dk/cache/build
+//The directory containing a CMake configuration file for GTest.
+GTest_DIR:PATH=/usr/lib/x86_64-linux-gnu/cmake/GTest
 
 //Value Computed by CMake
-CacheSystem_IS_TOP_LEVEL:STATIC=ON
+testLfuCache_BINARY_DIR:STATIC=/home/dk/cache/build
 
 //Value Computed by CMake
-CacheSystem_SOURCE_DIR:STATIC=/home/dk/cache
+testLfuCache_IS_TOP_LEVEL:STATIC=ON
 
 //Value Computed by CMake
-KCacheSystem_BINARY_DIR:STATIC=/home/dk/cache/build
-
-//Value Computed by CMake
-KCacheSystem_IS_TOP_LEVEL:STATIC=ON
-
-//Value Computed by CMake
-KCacheSystem_SOURCE_DIR:STATIC=/home/dk/cache
+testLfuCache_SOURCE_DIR:STATIC=/home/dk/cache
 
 
 ########################
@@ -316,6 +310,8 @@ CMAKE_GENERATOR_INSTANCE:INTERNAL=
 CMAKE_GENERATOR_PLATFORM:INTERNAL=
 //Name of generator toolset.
 CMAKE_GENERATOR_TOOLSET:INTERNAL=
+//Test CMAKE_HAVE_LIBC_PTHREAD
+CMAKE_HAVE_LIBC_PTHREAD:INTERNAL=1
 //Source directory with the top level CMakeLists.txt file for this
 // project
 CMAKE_HOME_DIRECTORY:INTERNAL=/home/dk/cache
@@ -383,6 +379,8 @@ CMAKE_TAPI-ADVANCED:INTERNAL=1
 CMAKE_UNAME:INTERNAL=/usr/bin/uname
 //ADVANCED property for variable: CMAKE_VERBOSE_MAKEFILE
 CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
+//Details about finding GTest
+FIND_PACKAGE_MESSAGE_DETAILS_GTest:INTERNAL=[/usr/lib/x86_64-linux-gnu/cmake/GTest/GTestConfig.cmake][c ][v1.14.0()]
 //linker supports push/pop state
 _CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED:INTERNAL=TRUE
 
