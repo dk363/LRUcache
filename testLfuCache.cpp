@@ -3,6 +3,9 @@
 #include <vector>
 #include <thread>
 #include <string>
+#include <random>   
+#include <chrono>      // 新增：用于 sleep_for
+#include <functional>  // 新增：用于 std::hash
 
 // 2. 关键：添加GTest命名空间，后续无需写testing::
 using namespace testing;
@@ -114,25 +117,45 @@ TEST(LfuCacheTest, HandleOverMaxAverageNum) {
 }
 
 TEST(LfuCacheTest, ThreadSafeAccess) {
-    Cache::LfuCache<int, std::string> cache(100);  // 增大容量，减少淘汰干扰
-    const int threadNum = 8;    // 增加线程数
-    const int opsPerThread = 100;  // 增加每个线程的操作数
+    const int threadNum = 8; // 线程数
+    const int opsPerThread = 100; // 线程操作数
+    Cache::LfuCache<int, std::string> cache(threadNum * opsPerThread); // 扩大到不触发驱逐
+
+    // 先预填充所有 key，保证后续并发操作不会因为未写入导致最终断言失败
+    for (int tid = 0; tid < threadNum; ++tid) {
+        for (int i = 0; i < opsPerThread; ++i) {
+            int key = tid * opsPerThread + i;
+            std::string value = "thread" + std::to_string(tid) + "_val" + std::to_string(i);
+            cache.put(key, value);
+        }
+    }
 
     auto threadFunc = [&cache](int threadId) {
+        // 每个线程用自己的 RNG，避免全局 rand() 的竞态
+        // 标准库中的 rand() 函数其实是全局伪随机生成 此处见 [https://mcnyabewsvkj.feishu.cn/wiki/AbEHwIjLuidlNYkxE7GcsqMrnHd#share-DsMXdt3cooGdYOxSUQFclrHGn6g]
+        thread_local std::mt19937 rng([] {
+            std::seed_seq seq{
+                (uint32_t)std::hash<std::thread::id>{}(std::this_thread::get_id()),
+                (uint32_t)std::chrono::steady_clock::now().time_since_epoch().count()
+            };
+            return std::mt19937(seq);
+        }());
+
+        std::uniform_int_distribution<int> coin(0, 1);
+        std::uniform_int_distribution<int> sleepDist(0, 9); // 用于 sleep 时长
         for (int i = 0; i < opsPerThread; ++i) {
             int key = threadId * opsPerThread + i;
+            // 与预填充一致，保证最终值可预测
             std::string value = "thread" + std::to_string(threadId) + "_val" + std::to_string(i);
-            
-            // 随机读写，模拟真实场景
-            if (rand() % 2 == 0) {
+
+            if (coin(rng) == 0) {
                 cache.put(key, value);
             } else {
                 std::string result;
                 cache.get(key, result);
             }
-            
-            // 随机延迟，放大竞态条件
-            std::this_thread::sleep_for(std::chrono::microseconds(rand() % 10));
+
+            std::this_thread::sleep_for(std::chrono::microseconds(sleepDist(rng)));
         }
     };
 
@@ -144,7 +167,7 @@ TEST(LfuCacheTest, ThreadSafeAccess) {
         t.join();
     }
 
-    // 验证最终数据一致性
+    // 验证最终数据一致性（预填充 + 并发 put 使用相同值，故可精确比较）
     for (int tid = 0; tid < threadNum; ++tid) {
         for (int i = 0; i < opsPerThread; ++i) {
             int key = tid * opsPerThread + i;

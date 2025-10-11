@@ -394,9 +394,9 @@ void LfuCache<Key, Value>::addToFreqList(NodePtr node)
 template<typename Key, typename Value>
 void LfuCache<Key, Value>::updateMinFreq()
 {
-    // 假设两个线程同时执行handleOverMaxAverageNum并调用updateMinFreq
-    std::lock_guard<std::mutex> lock(mutex_);
-
+    // NOTE: caller must hold mutex_ before calling this function.
+    // 本函数假定调用方已上锁（public API 如 put/get 已加锁），
+    // 为避免在同一线程对非递归 mutex 重复加锁导致死锁，这里不再内部加锁。
     minFreq_ = INT_MAX;
     for (const auto& pair : freqToFreqList_)
     {
