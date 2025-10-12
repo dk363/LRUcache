@@ -335,11 +335,13 @@ public:
         : capacity_(capacity)
         , sliceNum_(sliceNum)
     {
-        if (sliceNum_ <= 0) {
+        if (sliceNum_ <= 0) 
+        {
             throw std::invalid_argument("sliceNum must be greater than 0");
         }
         size_t sliceSize = std::ceil(static_cast<double>(capacity_) / sliceNum_);
-        for (size_t i = 0; i < sliceNum_; ++i) {
+        for (size_t i = 0; i < sliceNum_; ++i) 
+        {
             lruSliceCaches_.emplace_back(std::make_unique<LruCache<Key, Value>>(sliceSize));
         }
     }
@@ -363,7 +365,6 @@ public:
         get(key, value);
         return value;
     }
-
 
 private:
     size_t Hash(Key key) 

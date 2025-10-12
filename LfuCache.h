@@ -184,7 +184,7 @@ public:
         minFreq_ = INT_MAX;
     }
 
-    private:
+private:
     void putInternal(Key key, Value value); // 添加缓存
     void getInternal(NodePtr node, Value& value); // 获取缓存
 
@@ -413,4 +413,65 @@ void LfuCache<Key, Value>::updateMinFreq()
         minFreq_ = 1;
     }
 }
+
+template<typename Key, typename Value>
+class HashLfuCache 
+{
+public:
+    HashLfuCache(size_t capacity, size_t sliceNum)
+        : capacity_(capacity)
+        , sliceNum_(sliceNum)
+    {
+        if (sliceNum_ <= 0)
+        {
+            throw std::invalid_argument("sliceNum must be bigger than 0");
+        }
+
+        size_t sliceSize = std::ceil(static_cast<double>(capacity_) / sliceNum_);
+        for (size_t i = 0; i < sliceNum_; ++i)
+        {
+            lfuSliceCaches_.emplace_back(std::make_unique<LfuCache<Key, Value>>>(sliceSize));
+        }
+    }
+
+    void put(Key key, Value value)
+    {
+        size_t sliceIndex = Hash(key) % sliceNum_;
+        lfuSliceCaches_[sliceIndex]->put(key, value);
+    }
+
+    bool get(Key key, Value& value)
+    {
+        size_t sliceIndex = Hash(key) % sliceNum_;
+        lfuSliceCaches_[sliceIndex]->get(key, value);
+    }
+
+    Value get(Key key)
+    {
+        Value value{};
+        get(key, value);
+        return value;
+    }
+
+    void purge()
+    {
+        for (auto& LfuSliceCache : lfuSliceCaches_)
+        {
+            LfuSliceCache->purge();
+        }
+        
+    }
+private:
+    size_t Hash(Key key) 
+    {
+        std::hash<Key> Hashfunc;
+        return hashFunc(key);
+    }
+
+private:
+    size_t                                          capacity_;
+    int                                             sliceNum_;
+    std::vector<unique_ptr<LfuCache<Key, Value>>>   lfuSliceCaches_;
+};
+
 }
