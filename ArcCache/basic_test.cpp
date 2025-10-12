@@ -16,3 +16,7 @@ TEST(ArcLruPartTest, BasicPutAndGet) {
     EXPECT_EQ(value, "value2");
 }
 
+int main(int argc, char **argv) {
+    InitGoogleTest(&arg, argv);
+    return RUN_ALL_TESTS();
+}
