@@ -36,8 +36,8 @@ public:
     void setValue(const Value& another_value) { value_ = another_value; }
     void incrementAccessCount() { ++accessCount_; }
 
-    template<typename Key, typename Value> friend class ArcLruPart;
-    template<typename Key, typename Value> friend class ArcLfuPart;
+    template<typename K, typename V> friend class ArcLruPart;
+    template<typename K, typename V> friend class ArcLfuPart;
 };
 
 } // namespace Cache

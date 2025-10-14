@@ -114,6 +114,8 @@ private:
 
     void addToGhost(NodePtr node);
     void removeOldestGhost();
+
+    void resetAccessCount(NodePtr node);
 private:
     size_t      capacity_;
     size_t      ghostCapacity_;
@@ -167,7 +169,7 @@ void ArcLruPart<Key, Value>::moveToFront(NodePtr node)
 template<typename Key, typename Value>
 void ArcLruPart<Key, Value>::removeNode(NodePtr node)
 {
-    if (node->prev_.expired() && node->next_)
+    if (!node->prev_.expired() && node->next_)
     {
         auto prev = node->prev_.lock();
         prev->next_ = node->next_;
@@ -241,7 +243,7 @@ void ArcLruPart<Key, Value>::addToGhost(NodePtr node)
 {
     // 重置计数
     // TODO: 这里是为什么？
-    resetAccessCount();
+    resetAccessCount(node);
 
     node->prev_ = ghostHead_;
     node->next_ = ghostHead_->next_;
@@ -259,6 +261,12 @@ bool ArcLruPart<Key, Value>::updateNodeAccess(NodePtr node)
     moveToFront(node);
     node->incrementAccessCount();
     return node->getAccessCount() >= transformThreshold_;    
+}
+
+template<typename Key, typename Value>
+void ArcLruPart<Key, Value>::resetAccessCount(NodePtr node)
+{
+    node->accessCount_ = 1;
 }
 
 } // namespace Cache

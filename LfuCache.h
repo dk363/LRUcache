@@ -6,6 +6,7 @@
 #include <unordered_map> 
 #include <climits>     
 #include <stdexcept>   
+#include <memory>
 
 #include "CachePolicy.h"
 #include "Log.h"
@@ -32,12 +33,15 @@ private:
             : freq(1), key(key), value(value), prev(), next(nullptr) {}
     };
 
-    using NodePtr = std::shared_ptr<Node>;
     int freq_;
-    NodePtr dummyHead_;
-    NodePtr dummyTail_;
+    std::shared_ptr<Node> dummyHead_;
+    std::shared_ptr<Node> dummyTail_;
 
 public:
+    using Node = typename FreqList<Key, Value>::Node;
+    using NodePtr = std::shared_ptr<Node>;
+    using NodeMap = std::unordered_map<Key, NodePtr>;
+    
     // 对于单参数构造函数，尽量使用 explicit，除非明确需要隐式转换的场景（如智能指针的设计）。
     explicit FreqList(int n)
         : freq_(n)
@@ -430,20 +434,21 @@ public:
         size_t sliceSize = std::ceil(static_cast<double>(capacity_) / sliceNum_);
         for (size_t i = 0; i < sliceNum_; ++i)
         {
-            lfuSliceCaches_.emplace_back(std::make_unique<LfuCache<Key, Value>>>(sliceSize));
+            LfuSliceCaches_.emplace_back(std::make_unique<LfuCache<Key, Value>>>(sliceSize));
         }
     }
 
     void put(Key key, Value value)
     {
         size_t sliceIndex = Hash(key) % sliceNum_;
-        lfuSliceCaches_[sliceIndex]->put(key, value);
+        LfuSliceCaches_[sliceIndex]->put(key, value);
     }
 
     bool get(Key key, Value& value)
     {
         size_t sliceIndex = Hash(key) % sliceNum_;
-        lfuSliceCaches_[sliceIndex]->get(key, value);
+        LfuSliceCaches_[sliceIndex]->get(key, value);
+        return true;
     }
 
     Value get(Key key)
@@ -455,7 +460,7 @@ public:
 
     void purge()
     {
-        for (auto& LfuSliceCache : lfuSliceCaches_)
+        for (auto& LfuSliceCache : LfuSliceCaches_)
         {
             LfuSliceCache->purge();
         }
@@ -469,9 +474,9 @@ private:
     }
 
 private:
-    size_t                                          capacity_;
-    int                                             sliceNum_;
-    std::vector<unique_ptr<LfuCache<Key, Value>>>   lfuSliceCaches_;
+    size_t                                                  capacity_;
+    int                                                     sliceNum_;
+    std::vector<std::unique_ptr<LfuCache<Key, Value>>>      LfuSliceCaches_;
 };
 
 }

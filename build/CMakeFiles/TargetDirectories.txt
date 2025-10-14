@@ -1,4 +1,0 @@
-/home/dk/cache/build/CMakeFiles/test_lfu_cache.dir
-/home/dk/cache/build/CMakeFiles/test.dir
-/home/dk/cache/build/CMakeFiles/edit_cache.dir
-/home/dk/cache/build/CMakeFiles/rebuild_cache.dir

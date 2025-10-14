@@ -13,14 +13,14 @@ template<typename Key, typename Value>
 class ArcCache : public CachePolicy<Key, Value>
 {
 public:
-    explicit ArcCache(size_t capacity, size_t transformThreshold)
+    explicit ArcCache(size_t capacity, size_t transformThreshold = 2)
         : capacity_(capacity)
         , transformThreshold_(transformThreshold)
         , lruPart_(std::make_unique<ArcLruPart<Key, Value>>(capacity, transformThreshold))
         , lfuPart_(std::make_unique<ArcLfuPart<Key, Value>>(capacity, transformThreshold))
     {}
 
-    ~ArcCache override = default;
+    ~ArcCache() override = default;
 
     void put(Key key, Value value) override
     {
@@ -29,7 +29,7 @@ public:
         bool inLfu = lfuPart_->contain(key);
         if(inLfu)
         {
-            lfu->put(key, value);
+            lfuPart_->put(key, value);
         }
         else
         {
@@ -40,7 +40,7 @@ public:
 
     bool get(Key key, Value& value) override
     {
-        checkGhost(key);
+        checkGhostCaches(key);
 
         bool shouldTransform = false;
         if (lruPart_->get(key, value, shouldTransform))
@@ -68,16 +68,14 @@ public:
     }
 
 private:
-    checkGhostCaches(Key key)
+    void checkGhostCaches(Key key)
     {
-        bool inGhost = false;
         if (lruPart_->checkGhost(key))
         {
             if (lfuPart_->decreaseCapacity())
             {
-                lruPart->increaseCapacity();
+                lruPart_->increaseCapacity();
             }
-            inGhost = true;
         }
         else if (lfuPart_->checkGhost(key))
         {
@@ -85,9 +83,7 @@ private:
             {
                 lfuPart_->increaseCapacity();
             }
-            inGhost = true;
         }
-        return inGhost;
     }
 
 private:
