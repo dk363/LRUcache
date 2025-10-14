@@ -25,6 +25,7 @@ public:
         initializeLists();
     }
 
+    // 将 key value 放入 mainCache 中
     bool put(Key key, Value value)
     {
         if (capacity_ == 0) return false;
@@ -39,7 +40,7 @@ public:
         return addNewNode(key, value);
     }
 
-    
+    // 在mianCache 中查找 并且检查是否需要 在lru和lfu之间转变
     bool get(Key key, Value& value, bool& shouldTransform)
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -72,12 +73,14 @@ public:
         return false;
     }
 
+    // 增加容量
     void increaseCapacity() 
     {
         std::lock_guard<std::mutex> lock(mutex_);
         ++capacity_; 
     }
 
+    // 减少容量
     bool decreaseCapacity()
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -88,6 +91,7 @@ public:
         return true;
     }
 
+    // 移除key对应的node
     void remove(Key key)
     {
         auto it = mainCache_.find(key);
@@ -132,6 +136,7 @@ private:
     NodePtr     ghostTail_;
 };
 
+// 初始化列表
 template<typename Key, typename Value>
 void ArcLruPart<Key, Value>::initializeLists()
 {
@@ -263,6 +268,7 @@ bool ArcLruPart<Key, Value>::updateNodeAccess(NodePtr node)
     return node->getAccessCount() >= transformThreshold_;    
 }
 
+// 重置node的访问次数
 template<typename Key, typename Value>
 void ArcLruPart<Key, Value>::resetAccessCount(NodePtr node)
 {
