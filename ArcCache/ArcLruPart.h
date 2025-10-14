@@ -27,10 +27,7 @@ public:
 
     bool put(Key key, Value value)
     {
-        if (capacity_ == 0)
-        {
-            return false;
-        }
+        if (capacity_ == 0) return false;
 
         std::lock_guard<std::mutex> lock(mutex_);
 
@@ -42,6 +39,7 @@ public:
         return addNewNode(key, value);
     }
 
+    
     bool get(Key key, Value& value, bool& shouldTransform)
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -244,4 +242,5 @@ bool ArcLruPart<Key, Value>::updateNodeAccess(NodePtr node)
     node->incrementAccessCount();
     return node->getAccessCount() >= transformThreshold_;    
 }
-}
+
+} // namespace Cache
