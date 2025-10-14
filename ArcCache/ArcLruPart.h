@@ -60,6 +60,8 @@ public:
     // 这里通常和put get 函数一起调用 因此这里确实需要移除
     bool checkGhost(Key key)
     {
+        std::lock_guard<std::mutex> lock(mutex_);
+
         auto it = ghostCache_.find(key);
         if (it != ghostCache_.end())
         {
@@ -70,14 +72,30 @@ public:
         return false;
     }
 
-    void increaseCapacity() { ++capacity_; }
+    void increaseCapacity() 
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ++capacity_; 
+    }
 
     bool decreaseCapacity()
     {
+        std::lock_guard<std::mutex> lock(mutex_);
+
         if (capacity_ <= 0) return false;
         if (mainCache_.size() == capacity_) evictLeastRecent();
         --capacity_;
         return true;
+    }
+
+    void remove(Key key)
+    {
+        auto it = mainCache_.find(key);
+        if (it == mainCache_.end())
+        {
+            LOG_ERROR_CACHE("remove failed: there is not such key");
+        }
+        removeNode(it->second);
     }
 
 private:

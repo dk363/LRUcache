@@ -62,8 +62,6 @@ public:
     // 检查 mainCache_ 中是否有这个 key
     bool contain(Key key)
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-
         return mainCache_.find(key) != mainCache_.end();
     }
 
@@ -95,7 +93,7 @@ public:
     bool decreaseCapacity()
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        
+
         if (capacity_ <= 0) return false;
         if (mainCache_.size() == capacity_) evictLeastFrequent();
         --capacity_;
